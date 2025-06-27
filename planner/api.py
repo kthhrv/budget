@@ -10,7 +10,35 @@ import decimal
 from datetime import date
 import calendar
 
+# Define allowed owners
+ALLOWED_OWNERS = ['keith', 'tild', 'shared']
+
 api = NinjaAPI()
+
+
+def validate_owner(owner_id: int) -> User:
+    """
+    Validates that the owner ID corresponds to one of the allowed users.
+    Returns the User object if valid, raises HttpError if not.
+    """
+    try:
+        owner_user = get_object_or_404(User, id=owner_id)
+        if owner_user.username not in ALLOWED_OWNERS:
+            from ninja.errors import HttpError
+            raise HttpError(400, f"Owner must be one of: {', '.join(ALLOWED_OWNERS)}. Got: {owner_user.username}")
+        return owner_user
+    except User.DoesNotExist:
+        from ninja.errors import HttpError
+        raise HttpError(404, f"User with ID {owner_id} not found.")
+
+
+@api.get("/allowed-owners")
+def get_allowed_owners(request):
+    """
+    Returns the list of allowed owners with their IDs for frontend use.
+    """
+    users = User.objects.filter(username__in=ALLOWED_OWNERS).order_by('username')
+    return [{"id": user.id, "username": user.username} for user in users]
 
 # --- Pydantic Schemas for Month (no changes) ---
 class MonthIn(BaseModel):
@@ -189,7 +217,8 @@ def create_budget_item(request, item_in: BudgetItemIn):
     print(f"Django: POST request received for BudgetItem. Item_in data: {item_in.dict()}")
 
     try:
-        owner_user = get_object_or_404(User, id=item_in.owner)
+        # Validate owner is one of the allowed users
+        owner_user = validate_owner(item_in.owner)
         print(f"Django: Found owner: {owner_user.username} (ID: {owner_user.id})")
 
         month_obj = None
@@ -213,11 +242,6 @@ def create_budget_item(request, item_in: BudgetItemIn):
 
         return BudgetItemOut.from_orm(budget_item)
 
-    except User.DoesNotExist:
-        from ninja.errors import HttpError
-        print(f"Django: User with ID {item_in.owner} not found. Raising 404.")
-        raise HttpError(404, f"User with ID {item_in.owner} not found.")
-
     except Month.DoesNotExist:
         from ninja.errors import HttpError
         print(f"Django: Month with ID {item_in.month} not found. Raising 404.")
@@ -229,10 +253,13 @@ def create_budget_item(request, item_in: BudgetItemIn):
         raise HttpError(400, "Invalid value format. Please provide a valid number.")
 
     except Exception as e:
+        from ninja.errors import HttpError
+        # Don't catch HttpError - let it propagate
+        if isinstance(e, HttpError):
+            raise e
         print(f"Django: An unexpected error occurred during item creation: {e}")
         import traceback
         traceback.print_exc()
-        from ninja.errors import HttpError
         raise HttpError(500, "An internal server error occurred.")
 
 
@@ -248,8 +275,8 @@ def update_budget_item(request, item_id: int, item_in: BudgetItemIn):
         budget_item = get_object_or_404(BudgetItem, id=item_id)
         print(f"Django: Found item to update: {budget_item.name} (ID: {budget_item.id})")
 
-        # Fetch owner and month objects for validation/assignment
-        owner_user = get_object_or_404(User, id=item_in.owner)
+        # Validate owner is one of the allowed users
+        owner_user = validate_owner(item_in.owner)
         month_obj = get_object_or_404(Month, id=item_in.month) if item_in.month else None
 
         # Update fields from the incoming payload
@@ -271,10 +298,6 @@ def update_budget_item(request, item_id: int, item_in: BudgetItemIn):
         from ninja.errors import HttpError
         print(f"Django: BudgetItem with ID {item_id} not found. Raising 404.")
         raise HttpError(404, f"BudgetItem with ID {item_id} not found.")
-    except User.DoesNotExist:
-        from ninja.errors import HttpError
-        print(f"Django: User with ID {item_in.owner} not found for update. Raising 404.")
-        raise HttpError(404, f"User with ID {item_in.owner} not found.")
     except Month.DoesNotExist:
         from ninja.errors import HttpError
         print(f"Django: Month with ID {item_in.month} not found for update. Raising 404.")
@@ -284,10 +307,13 @@ def update_budget_item(request, item_id: int, item_in: BudgetItemIn):
         print(f"Django: Invalid value format for '{item_in.value}' during update. Raising 400.")
         raise HttpError(400, "Invalid value format. Please provide a valid number.")
     except Exception as e:
+        from ninja.errors import HttpError
+        # Don't catch HttpError - let it propagate
+        if isinstance(e, HttpError):
+            raise e
         print(f"Django: An unexpected error occurred during item update: {e}")
         import traceback
         traceback.print_exc()
-        from ninja.errors import HttpError
         raise HttpError(500, "An internal server error occurred during item update.")
 
 
