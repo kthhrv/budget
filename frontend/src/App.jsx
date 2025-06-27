@@ -416,17 +416,27 @@ function App() {
                 />
               </div>
               <div className="flex flex-col">
-                <label htmlFor="newMonthNumber" className="text-sm font-medium text-gray-700 mb-1">Month Number (1-12)</label>
-                <input
-                  type="number"
+                <label htmlFor="newMonthNumber" className="text-sm font-medium text-gray-700 mb-1">Month</label>
+                <select
                   value={newMonthNumber}
                   onChange={(e) => setNewMonthNumber(e.target.value)}
-                  placeholder="e.g., 7 for July"
                   id="newMonthNumber"
                   name="newMonthNumber"
-                  min="1" max="12"
-                  className="p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out"
-                />
+                  className="p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out text-gray-800"
+                >
+                  <option value="1">January</option>
+                  <option value="2">February</option>
+                  <option value="3">March</option>
+                  <option value="4">April</option>
+                  <option value="5">May</option>
+                  <option value="6">June</option>
+                  <option value="7">July</option>
+                  <option value="8">August</option>
+                  <option value="9">September</option>
+                  <option value="10">October</option>
+                  <option value="11">November</option>
+                  <option value="12">December</option>
+                </select>
               </div>
               <div className="flex items-end">
                 <button
