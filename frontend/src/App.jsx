@@ -5,6 +5,7 @@ function App() {
   const [items, setItems] = useState([]);
   const [months, setMonths] = useState([]);
   const [selectedMonthId, setSelectedMonthId] = useState(''); // Stores the ID of the currently selected month
+  const [allowedOwners, setAllowedOwners] = useState([]); // State for allowed owners
 
   // State variables for the new budget item form
   const [newItemName, setNewItemName] = useState('');
@@ -37,8 +38,12 @@ function App() {
   // --- Effect to fetch months and set default selected month on initial load ---
   useEffect(() => {
     const initializeApp = async () => {
-      console.log("initializeApp: Fetching months...");
-      const fetchedMonths = await fetchMonths(); // Fetch all available months
+      console.log("initializeApp: Fetching months and allowed owners...");
+      const [fetchedMonths, fetchedOwners] = await Promise.all([
+        fetchMonths(), // Fetch all available months
+        fetchAllowedOwners() // Fetch allowed owners
+      ]);
+      
       if (fetchedMonths.length > 0) {
         // Find the current month (year and month_number)
         const currentYear = new Date().getFullYear();
@@ -88,6 +93,16 @@ function App() {
   }, [items]);
 
   /**
+   * Gets the username for a given owner ID.
+   * @param {number} ownerId - The ID of the owner
+   * @returns {string} The username or 'Unknown' if not found
+   */
+  const getOwnerUsername = (ownerId) => {
+    const owner = allowedOwners.find(o => o.id === ownerId);
+    return owner ? owner.username : 'Unknown';
+  };
+
+  /**
    * Fetches all available budget months from the Django backend.
    * @returns {Array} An array of month objects.
    */
@@ -106,6 +121,33 @@ function App() {
       return data; // Return data for immediate use in initializeApp
     } catch (error) {
       console.error("fetchMonths: Error fetching months:", error);
+      return [];
+    }
+  };
+
+  /**
+   * Fetches allowed owners from the Django backend.
+   * @returns {Array} An array of allowed owner objects.
+   */
+  const fetchAllowedOwners = async () => {
+    console.log("fetchAllowedOwners: Attempting to fetch from http://localhost:8000/api/allowed-owners");
+    try {
+      const response = await fetch('http://localhost:8000/api/allowed-owners');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`fetchAllowedOwners: HTTP error! status: ${response.status}, text: ${errorText}`);
+        return [];
+      }
+      const data = await response.json();
+      console.log("fetchAllowedOwners: Parsed JSON data:", data);
+      setAllowedOwners(data);
+      // Set default owner to the first allowed owner if available
+      if (data.length > 0) {
+        setNewItemOwner(data[0].id.toString());
+      }
+      return data;
+    } catch (error) {
+      console.error("fetchAllowedOwners: Error fetching allowed owners:", error);
       return [];
     }
   };
@@ -177,7 +219,7 @@ function App() {
   const handleAddItem = async () => {
     // Basic client-side validation
     if (!newItemName.trim() || !newItemValue.trim() || !newItemOwner.trim() || !newItemMonth || !newCategory) {
-      alert("Service, Value, Owner ID, Month, and Category are required fields.");
+      alert("Service, Value, Owner, Month, and Category are required fields.");
       return;
     }
 
@@ -313,7 +355,7 @@ function App() {
   const handleSaveEdit = async (itemId) => {
     // Client-side validation for edited item
     if (!editedItem.name.trim() || !editedItem.value || !editedItem.owner || !editedItem.category) {
-      alert("Service, Value, Owner ID, and Category are required fields for editing.");
+      alert("Service, Value, Owner, and Category are required fields for editing.");
       return;
     }
 
@@ -482,16 +524,20 @@ function App() {
                 />
               </div>
               <div className="flex flex-col">
-                <label htmlFor="newItemOwner" className="text-sm font-medium text-gray-700 mb-1">Owner ID</label>
-                <input
-                  type="text"
+                <label htmlFor="newItemOwner" className="text-sm font-medium text-gray-700 mb-1">Owner</label>
+                <select
                   value={newItemOwner}
                   onChange={(e) => setNewItemOwner(e.target.value)}
-                  placeholder="e.g., 1"
                   id="newItemOwner"
                   name="newItemOwner"
-                  className="p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 transition duration-150 ease-in-out"
-                />
+                  className="p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 transition duration-150 ease-in-out text-gray-800"
+                >
+                  {allowedOwners.map(owner => (
+                    <option key={owner.id} value={owner.id}>
+                      {owner.username}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="flex items-center mt-6">
                 <input
@@ -615,14 +661,19 @@ function App() {
                           />
                         </div>
                         <div className="flex flex-col">
-                          <label htmlFor={`editOwner-${item.id}`} className="text-sm font-medium text-gray-700 mb-1">Owner ID</label>
-                          <input
-                            type="text"
+                          <label htmlFor={`editOwner-${item.id}`} className="text-sm font-medium text-gray-700 mb-1">Owner</label>
+                          <select
                             id={`editOwner-${item.id}`}
                             value={editedItem.owner}
                             onChange={(e) => setEditedItem({ ...editedItem, owner: e.target.value })}
-                            className="p-2 border border-gray-300 rounded-md"
-                          />
+                            className="p-2 border border-gray-300 rounded-md text-gray-800"
+                          >
+                            {allowedOwners.map(owner => (
+                              <option key={owner.id} value={owner.id}>
+                                {owner.username}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div className="flex items-center">
                           <input
@@ -709,7 +760,7 @@ function App() {
                           </p>
                           <p className="text-gray-600 text-sm mt-1">
                             Value: <span className={`font-bold ${item.category === 'income' ? 'text-green-700' : 'text-red-700'}`}>£{item.value ? item.value.toFixed(2) : '0.00'}</span> {/* Category-based color */}
-                            {' '}| Owner ID: <span className="font-semibold">{item.owner}</span>
+                            {' '}| Owner: <span className="font-semibold">{getOwnerUsername(item.owner)}</span>
                             {item.repeating && <span className="ml-2 px-2 py-0.5 bg-purple-200 text-purple-800 text-xs font-medium rounded-full">Repeating</span>}
                           </p>
                           {(item.start_date || item.end_date) && (
